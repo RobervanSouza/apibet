@@ -8,23 +8,27 @@ dotenv.config();
 const app = express();
 const PORT = 3000;
 
-// Função para formatar horário em formato legível local
+// Função para formatar o horário em formato legível local
 function formatarHorario(iso) {
-    const date = new Date(iso);
-    return date.toLocaleString("pt-BR", { hour12: false });
+    try {
+        if (!iso) return "Indefinido";
+        const date = new Date(iso);
+        return date.toLocaleString("pt-BR", { hour12: false });
+    } catch {
+        return "Indefinido";
+    }
 }
-
 // 🔹 Rota para atualizar jogos da API-Football e salvar no MongoDB
 app.get("/atualizar-jogos", async (req, res) => {
     try {
-        // 1️⃣ Pega todos os jogos ao vivo
+        // 1️⃣ Busca todos os jogos ao vivo
         const { data } = await axios.get(
             "https://v3.football.api-sports.io/fixtures?live=all",
             {
                 headers: {
                     "x-apisports-key": "18559b19e7aea4c4e8264dd385afd3b3",
-                    "Accept": "application/json"
-                }
+                    Accept: "application/json",
+                },
             }
         );
 
@@ -37,10 +41,12 @@ app.get("/atualizar-jogos", async (req, res) => {
 
         for (const event of data.response) {
             const nome = `${event.teams.home.name} vs ${event.teams.away.name}`;
-            const status = event.fixture.status.short;
-            const horario = formatarHorario(event.fixture.date);
-            const placarHome = event.goals.home ?? 0;
-            const placarAway = event.goals.away ?? 0;
+            const status = event.fixture?.status?.short ?? "ND";
+            const horario = event.fixture?.date
+                ? formatarHorario(event.fixture.date)
+                : "Horário indefinido";
+            const placarHome = event.goals?.home ?? 0;
+            const placarAway = event.goals?.away ?? 0;
             const placar = `${placarHome} x ${placarAway}`;
 
             // 2️⃣ Busca estatísticas detalhadas do jogo
@@ -51,18 +57,17 @@ app.get("/atualizar-jogos", async (req, res) => {
                     {
                         headers: {
                             "x-apisports-key": "18559b19e7aea4c4e8264dd385afd3b3",
-                            "Accept": "application/json"
-                        }
+                            Accept: "application/json",
+                        },
                     }
                 );
 
                 if (statsData.response && Array.isArray(statsData.response)) {
-                    statsData.response.forEach(teamStats => {
+                    statsData.response.forEach((teamStats) => {
                         const teamName = teamStats.team.name;
                         estatisticas[ teamName ] = {};
-                        teamStats.statistics.forEach(stat => {
-                            // Exemplo: Shots, Possession, Corners, Fouls, Yellow Cards, Red Cards
-                            estatisticas[ teamName ][ stat.type ] = stat.value;
+                        teamStats.statistics.forEach((stat) => {
+                            estatisticas[ teamName ][ stat.type ] = stat.value ?? 0;
                         });
                     });
                 }
@@ -71,13 +76,14 @@ app.get("/atualizar-jogos", async (req, res) => {
             }
 
             // Eventos detalhados do jogo
-            const eventos = event.events?.map(e => ({
-                minuto: e.time.elapsed,
-                tipo: e.type,
-                detalhe: e.detail,
-                jogador: e.player?.name ?? null,
-                equipe: e.team?.name ?? null
-            })) ?? [];
+            const eventos =
+                event.events?.map((e) => ({
+                    minuto: e.time?.elapsed ?? 0,
+                    tipo: e.type ?? "Desconhecido",
+                    detalhe: e.detail ?? "",
+                    jogador: e.player?.name ?? "",
+                    equipe: e.team?.name ?? "",
+                })) ?? [];
 
             const jogo = {
                 bet: event.fixture.id.toString(),
@@ -86,31 +92,24 @@ app.get("/atualizar-jogos", async (req, res) => {
                 placar,
                 status,
                 estatisticas,
-                eventos
+                eventos,
             };
 
             // Salva/atualiza no MongoDB (upsert)
             await prisma.jogos.upsert({
                 where: { bet: jogo.bet },
                 update: jogo,
-                create: jogo
+                create: jogo,
             });
 
             jogosDetalhes.push(jogo);
 
-            // Mostra no console
-            console.log(`- ${nome}`);
-            console.log(`   Horário: ${horario}`);
-            console.log(`   Placar:  ${placar}`);
-            console.log(`   Status:  ${status}`);
-            console.log(`   Estatísticas:`, estatisticas);
-            console.log(`   Eventos:`, eventos);
-            console.log("----------------------------------------------------");
+            // Log simplificado
+            console.log(`✔️ ${nome} | ${placar} | ${status}`);
         }
 
         // Retorna JSON organizado no navegador
         res.json({ sucesso: true, total: jogosDetalhes.length, jogos: jogosDetalhes });
-
     } catch (error) {
         console.error("Erro ao buscar dados da API-Football:", error.message);
         if (error.response) {
@@ -132,4 +131,6 @@ app.get("/", async (req, res) => {
     }
 });
 
-app.listen(PORT, () => console.log(`🚀 Servidor rodando em http://localhost:${PORT}`));
+app.listen(PORT, () =>
+    console.log(`🚀 Servidor rodando em http://localhost:${PORT}`)
+);
