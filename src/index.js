@@ -6,7 +6,10 @@ import { prisma } from "./utils/prisma.js";
 dotenv.config();
 
 const app = express();
-const PORT = 3000;
+
+// Log inicial — aparece tanto local quanto na Vercel
+console.log("🚀 Inicializando servidor Express...");
+console.log(`🌍 Ambiente: ${process.env.NODE_ENV || "desenvolvimento"}`);
 
 // Função para formatar o horário em formato legível local
 function formatarHorario(iso) {
@@ -18,22 +21,25 @@ function formatarHorario(iso) {
         return "Indefinido";
     }
 }
+
 // 🔹 Rota para atualizar jogos da API-Football e salvar no MongoDB
 app.get("/atualizar-jogos", async (req, res) => {
+    console.log("📡 Requisição recebida em /atualizar-jogos");
+
     try {
-        // 1️⃣ Busca todos os jogos ao vivo
         const { data } = await axios.get(
             "https://v3.football.api-sports.io/fixtures?live=all",
             {
                 headers: {
-                    "x-apisports-key": "18559b19e7aea4c4e8264dd385afd3b3",
+                    "x-apisports-key":
+                        process.env.API_FOOTBALL_KEY || "18559b19e7aea4c4e8264dd385afd3b3",
                     Accept: "application/json",
                 },
             }
         );
 
         if (!data.response || !Array.isArray(data.response)) {
-            console.error("Estrutura de dados inesperada:", data);
+            console.error("⚠️ Estrutura de dados inesperada:", data);
             return res.status(500).json({ erro: "Estrutura de dados inesperada" });
         }
 
@@ -49,14 +55,15 @@ app.get("/atualizar-jogos", async (req, res) => {
             const placarAway = event.goals?.away ?? 0;
             const placar = `${placarHome} x ${placarAway}`;
 
-            // 2️⃣ Busca estatísticas detalhadas do jogo
             let estatisticas = {};
             try {
                 const { data: statsData } = await axios.get(
                     `https://v3.football.api-sports.io/fixtures/statistics?fixture=${event.fixture.id}`,
                     {
                         headers: {
-                            "x-apisports-key": "18559b19e7aea4c4e8264dd385afd3b3",
+                            "x-apisports-key":
+                                process.env.API_FOOTBALL_KEY ||
+                                "18559b19e7aea4c4e8264dd385afd3b3",
                             Accept: "application/json",
                         },
                     }
@@ -72,10 +79,9 @@ app.get("/atualizar-jogos", async (req, res) => {
                     });
                 }
             } catch (errStats) {
-                console.error("Erro ao buscar estatísticas do jogo:", nome, errStats.message);
+                console.error("Erro ao buscar estatísticas:", nome, errStats.message);
             }
 
-            // Eventos detalhados do jogo
             const eventos =
                 event.events?.map((e) => ({
                     minuto: e.time?.elapsed ?? 0,
@@ -95,7 +101,6 @@ app.get("/atualizar-jogos", async (req, res) => {
                 eventos,
             };
 
-            // Salva/atualiza no MongoDB (upsert)
             await prisma.jogos.upsert({
                 where: { bet: jogo.bet },
                 update: jogo,
@@ -103,15 +108,13 @@ app.get("/atualizar-jogos", async (req, res) => {
             });
 
             jogosDetalhes.push(jogo);
-
-            // Log simplificado
             console.log(`✔️ ${nome} | ${placar} | ${status}`);
         }
 
-        // Retorna JSON organizado no navegador
+        console.log(`✅ Atualização concluída: ${jogosDetalhes.length} jogos.`);
         res.json({ sucesso: true, total: jogosDetalhes.length, jogos: jogosDetalhes });
     } catch (error) {
-        console.error("Erro ao buscar dados da API-Football:", error.message);
+        console.error("❌ Erro ao buscar dados:", error.message);
         if (error.response) {
             console.error("Status:", error.response.status);
             console.error("Dados:", error.response.data);
@@ -122,6 +125,7 @@ app.get("/atualizar-jogos", async (req, res) => {
 
 // 🔹 Rota para listar todos os jogos do banco
 app.get("/", async (req, res) => {
+    console.log("📡 Requisição recebida em /");
     try {
         const jogos = await prisma.jogos.findMany();
         res.json(jogos);
@@ -131,6 +135,15 @@ app.get("/", async (req, res) => {
     }
 });
 
-app.listen(PORT, () =>
-    console.log(`🚀 Servidor rodando em http://localhost:${PORT}`)
-);
+// 🔹 Exporta o app (para Vercel)
+export default app;
+
+// 🔹 Executa localmente (para desenvolvimento)
+if (process.env.NODE_ENV !== "production") {
+    const PORT = process.env.PORT || 3000;
+    app.listen(PORT, () => {
+        console.log(`🚀 Servidor rodando em http://localhost:${PORT}`);
+    });
+} else {
+    console.log("✅ Aplicação rodando no ambiente Vercel (sem app.listen)");
+}
