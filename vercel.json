@@ -7,9 +7,7 @@
     }
   ],
   "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "src/index.js"
-    }
+    { "src": "/atualizar-jogos", "dest": "/src/index.js" },
+    { "src": "/(.*)", "dest": "/src/index.js" }
   ]
 }
