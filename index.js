@@ -3,7 +3,7 @@ import express from "express";
 import serverless from "serverless-http";
 import axios from "axios";
 import dotenv from "dotenv";
-import { prisma } from "./utils/prisma.js";
+import { prisma } from "./src/utils/prisma.js";
 
 dotenv.config();
 
