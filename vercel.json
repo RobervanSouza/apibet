@@ -2,22 +2,22 @@
   "version": 2,
   "builds": [
     {
-      "src": "src/index.js",
+      "src": "index.js", 
       "use": "@vercel/node"
     }
   ],
   "routes": [
     {
       "src": "/",
-      "dest": "index.js"
+      "dest": "index.js" 
     },
     {
       "src": "/atualizar-jogos",
-      "dest": "/src/index.js" 
+      "dest": "index.js" 
     },
     {
       "src": "/(.*)",
-      "dest": "/src/index.js" 
+      "dest": "index.js" 
     }
   ]
 }
