@@ -129,8 +129,7 @@ app.get("/", async (req, res) => {
 });
 
 // 🔹 Exporta o handler para Vercel
-export const handler = serverless(app);
-
+export default serverless(app);
 // 🔹 Mantém funcionamento local
 if (process.env.NODE_ENV !== "production") {
     const PORT = process.env.PORT || 3000;
