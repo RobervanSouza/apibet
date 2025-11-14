@@ -1,6 +1,7 @@
 generator client {
   provider = "prisma-client-js"
-  
+  // Esta linha garante que o binário correto para o ambiente Linux (Vercel) seja incluído.
+  binaryTargets = ["native", "rhel-openssl-1.0.x"] 
 }
 
 datasource db {
@@ -9,12 +10,12 @@ datasource db {
 }
 
 model jogos {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  bet       String   @unique
-  nome      String
-  horario   String?  // <- ajustado para permitir nulo
-  placar    String?
-  status    String?
-  estatisticas Json?
-  eventos     Json?
+  id            String  @id @default(auto()) @map("_id") @db.ObjectId
+  bet           String  @unique
+  nome          String
+  horario       String?
+  placar        String?
+  status        String?
+  estatisticas  Json?
+  eventos       Json?
 }
