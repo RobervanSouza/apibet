@@ -347,7 +347,7 @@ app.get("/", async (req, res) => {
 export default serverless(app);
 
 
-
+// index
 // 🔹 Mantém funcionamento local (para nodemon/npm start)
 
 if (process.env.NODE_ENV !== "production") {
