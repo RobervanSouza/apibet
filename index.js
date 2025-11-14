@@ -1,15 +1,14 @@
-// index.js
 import express from "express";
 import serverless from "serverless-http";
 import axios from "axios";
 import dotenv from "dotenv";
 import { prisma } from "./prisma.js";
 
+// Carrega variáveis de ambiente
 dotenv.config();
 
 const app = express();
 
-// Log inicial
 console.log("🚀 Inicializando servidor Express...");
 console.log(`🌍 Ambiente: ${process.env.NODE_ENV || "desenvolvimento"}`);
 
@@ -17,10 +16,32 @@ console.log(`🌍 Ambiente: ${process.env.NODE_ENV || "desenvolvimento"}`);
 function formatarHorario(iso) {
     try {
         if (!iso) return "Indefinido";
-        return new Date(iso).toLocaleString("pt-BR", { hour12: false });
+        return new Date(iso).toLocaleString("pt-BR", {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour12: false
+        });
     } catch {
         return "Indefinido";
     }
+}
+
+// 🛠️ Função utilitária para processar promessas em lotes (batching)
+// Isso evita sobrecarregar a API externa e o DB, prevenindo Timeouts.
+async function batchProcess(items, batchSize, asyncTask) {
+    const results = [];
+    for (let i = 0; i < items.length; i += batchSize) {
+        const batch = items.slice(i, i + batchSize);
+        // Mapeia e executa o lote atual em paralelo (Promise.all)
+        const batchPromises = batch.map(asyncTask);
+        const batchResults = await Promise.all(batchPromises);
+        results.push(...batchResults);
+    }
+    return results;
 }
 
 // 🔹 Rota para atualizar jogos da API-Football e salvar no MongoDB
@@ -28,6 +49,7 @@ app.get("/atualizar-jogos", async (req, res) => {
     console.log("📡 Requisição recebida em /atualizar-jogos");
 
     try {
+        // 1. Busca dados dos jogos ao vivo (Primeira chamada única)
         const { data } = await axios.get(
             "https://v3.football.api-sports.io/fixtures?live=all",
             {
@@ -38,33 +60,39 @@ app.get("/atualizar-jogos", async (req, res) => {
             }
         );
 
-        if (!data.response || !Array.isArray(data.response)) {
-            console.error("⚠️ Estrutura de dados inesperada:", data);
-            return res.status(500).json({ erro: "Estrutura de dados inesperada" });
+        const jogosParaProcessar = data.response;
+
+        if (!jogosParaProcessar || !Array.isArray(jogosParaProcessar) || jogosParaProcessar.length === 0) {
+            console.log("⚠️ Sem jogos ao vivo para processar.");
+            return res.status(200).json({ sucesso: true, total: 0, jogos: [] });
         }
 
-        const jogosDetalhes = [];
-
-        for (const event of data.response) {
+        // 2. Define a tarefa assíncrona para cada jogo
+        // Esta função será executada em lotes
+        const processGame = async (event) => {
             const nome = `${event.teams.home.name} vs ${event.teams.away.name}`;
-            const status = event.fixture?.status?.short ?? "ND";
-            const horario = event.fixture?.date ? formatarHorario(event.fixture.date) : "Horário indefinido";
-            const placar = `${event.goals?.home ?? 0} x ${event.goals?.away ?? 0}`;
+            const fixtureId = event.fixture.id.toString();
 
             let estatisticas = {};
-            try {
-                const { data: statsData } = await axios.get(
-                    `https://v3.football.api-sports.io/fixtures/statistics?fixture=${event.fixture.id}`,
-                    {
-                        headers: {
-                            "x-apisports-key": process.env.API_FOOTBALL_KEY,
-                            Accept: "application/json",
-                        },
-                    }
-                );
+            let eventos = [];
 
-                if (statsData.response && Array.isArray(statsData.response)) {
-                    statsData.response.forEach((teamStats) => {
+            // BUSCA DE DETALHES (Stats e Events) EM PARALELO
+            try {
+                // Requisições internas em paralelo
+                const [ statsResponse, eventsResponse ] = await Promise.all([
+                    axios.get(
+                        `https://v3.football.api-sports.io/fixtures/statistics?fixture=${fixtureId}`,
+                        { headers: { "x-apisports-key": process.env.API_FOOTBALL_KEY, Accept: "application/json" } }
+                    ),
+                    axios.get(
+                        `https://v3.football.api-sports.io/fixtures/events?fixture=${fixtureId}`,
+                        { headers: { "x-apisports-key": process.env.API_FOOTBALL_KEY, Accept: "application/json" } }
+                    ),
+                ]);
+
+                // Mapeamento de Estatísticas
+                if (statsResponse.data.response && Array.isArray(statsResponse.data.response)) {
+                    statsResponse.data.response.forEach((teamStats) => {
                         const teamName = teamStats.team.name;
                         estatisticas[ teamName ] = {};
                         teamStats.statistics.forEach((stat) => {
@@ -72,49 +100,63 @@ app.get("/atualizar-jogos", async (req, res) => {
                         });
                     });
                 }
-            } catch (errStats) {
-                console.error("Erro ao buscar estatísticas:", nome, errStats.message);
+
+                // Mapeamento de Eventos
+                if (eventsResponse.data.response && Array.isArray(eventsResponse.data.response)) {
+                    eventos = eventsResponse.data.response.map((e) => ({
+                        minuto: e.time?.elapsed ?? 0,
+                        tipo: e.type ?? "Desconhecido",
+                        detalhe: e.detail ?? "",
+                        jogador: e.player?.name ?? "",
+                        equipe: e.team?.name ?? "",
+                    }));
+                }
+            } catch (errDetail) {
+                // Captura erros de requisições secundárias para não quebrar o lote
+                console.warn(`⚠️ Aviso: Falha ao buscar detalhes para ${nome}: ${errDetail.message}`);
             }
 
-            const eventos = event.events?.map((e) => ({
-                minuto: e.time?.elapsed ?? 0,
-                tipo: e.type ?? "Desconhecido",
-                detalhe: e.detail ?? "",
-                jogador: e.player?.name ?? "",
-                equipe: e.team?.name ?? "",
-            })) ?? [];
-
+            // Objeto Jogo
             const jogo = {
-                bet: event.fixture.id.toString(),
+                bet: fixtureId,
                 nome,
-                horario,
-                placar,
-                status,
+                horario: event.fixture.date ? formatarHorario(event.fixture.date) : "Horário indefinido",
+                placar: `${event.goals?.home ?? 0} x ${event.goals?.away ?? 0}`,
+                status: event.fixture?.status?.short ?? "ND",
                 estatisticas,
                 eventos,
             };
 
+            // Salva/Atualiza no MongoDB (upsert)
             await prisma.jogos.upsert({
                 where: { bet: jogo.bet },
                 update: jogo,
                 create: jogo,
             });
 
-            jogosDetalhes.push(jogo);
-            console.log(`✔️ ${nome} | ${placar} | ${status}`);
-        }
+            console.log(`✔️ UPSERT: ${nome} | ${jogo.placar} | ${jogo.status}`);
+            return jogo; // Retorna o jogo processado
+        };
 
-        console.log(`✅ Atualização concluída: ${jogosDetalhes.length} jogos.`);
-        res.json({ sucesso: true, total: jogosDetalhes.length, jogos: jogosDetalhes });
+        // 3. Executa o processamento em lotes de 5 jogos (ajustar se necessário)
+        const BATCH_SIZE = 5;
+        console.log(`⏳ Processando ${jogosParaProcessar.length} jogos em lotes de ${BATCH_SIZE}...`);
+        const jogosProcessados = await batchProcess(jogosParaProcessar, BATCH_SIZE, processGame);
+
+        // 4. Finaliza a rota (Seção de sucesso)
+        console.log(`✅ Atualização concluída: ${jogosProcessados.length} jogos processados.`);
+        res.json({ sucesso: true, total: jogosProcessados.length, jogos: jogosProcessados });
+
     } catch (error) {
-        console.error("❌ Erro ao buscar dados:", error.message);
+        console.error("❌ ERRO CRÍTICO NA ATUALIZAÇÃO:", error.message);
         if (error.response) {
             console.error("Status:", error.response.status);
             console.error("Dados:", error.response.data);
         }
-        res.status(500).json({ erro: "Falha ao buscar dados da API-Football" });
+        res.status(500).json({ erro: "Falha ao processar ou buscar dados da API-Football" });
     }
 });
+
 
 // 🔹 Rota para listar todos os jogos do banco
 app.get("/", async (req, res) => {
@@ -123,19 +165,20 @@ app.get("/", async (req, res) => {
         const jogos = await prisma.jogos.findMany();
         res.json(jogos);
     } catch (error) {
-        console.error("Erro ao listar jogos:", error.message);
+        console.error("❌ Erro ao listar jogos:", error.message);
         res.status(500).json({ erro: "Erro ao buscar jogos no banco" });
     }
 });
 
-// 🔹 Exporta o handler para Vercel
+// 🔹 Exporta o handler para Vercel (Exportação Padrão para Módulos ES)
 export default serverless(app);
-// 🔹 Mantém funcionamento local
+
+// 🔹 Mantém funcionamento local (para nodemon/npm start)
 if (process.env.NODE_ENV !== "production") {
     const PORT = process.env.PORT || 3000;
     app.listen(PORT, () => {
         console.log(`🚀 Servidor rodando em http://localhost:${PORT}`);
     });
 } else {
-    console.log("✅ Aplicação rodando no ambiente Vercel (sem app.listen)");
+    console.log("✅ Aplicação pronta para execução serverless (Vercel)");
 }
