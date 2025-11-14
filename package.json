@@ -8,13 +8,15 @@
     "dev": "nodemon index.js",
     "start": "node index.js",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "buil": "tsc"
+    "buil": "tsc",
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "@prisma/client": "^6.19.0",
     "axios": "^1.13.2",
     "express": "^5.1.0",
-    "serverless-http": "^4.0.0"
+    "serverless-http": "^4.0.0",
+    "dotenv": "^16.4.5"
   },
   "devDependencies": {
     "nodemon": "^3.1.10",
