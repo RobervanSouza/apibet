@@ -1,7 +1,6 @@
 generator client {
   provider = "prisma-client-js"
-  // Esta linha garante que o binário correto para o ambiente Linux (Vercel) seja incluído.
-  binaryTargets = ["native", "rhel-openssl-1.0.x"] 
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
 datasource db {

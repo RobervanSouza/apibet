@@ -151,10 +151,7 @@ app.get("/atualizar-jogos", async (req, res) => {
             console.error("Dados:", error.response.data);
         }
         res.status(500).json({ erro: "Falha ao processar ou buscar dados da API-Football" });
-    } finally {
-        // 🚨 CRÍTICO PARA VERCEL: Fecha a conexão do Prisma para evitar o timeout de 300s.
-        await prisma.$disconnect();
-    }
+    } 
 });
 
 
@@ -167,21 +164,9 @@ app.get("/", async (req, res) => {
     } catch (error) {
         console.error("❌ Erro ao listar jogos:", error.message);
         res.status(500).json({ erro: "Erro ao buscar jogos no banco" });
-    } finally {
-        // 🚨 CRÍTICO PARA VERCEL: Fecha a conexão do Prisma
-        await prisma.$disconnect();
-    }
+    } 
 });
 
 // 🔹 Exporta o handler para Vercel (Exportação Padrão para Módulos ES)
 export default serverless(app);
 
-// 🔹 Mantém funcionamento local (para nodemon/npm start)
-if (process.env.NODE_ENV !== "production") {
-    const PORT = process.env.PORT || 3000;
-    app.listen(PORT, () => {
-        console.log(`🚀 Servidor rodando em http://localhost:${PORT}`);
-    });
-} else {
-    console.log("✅ Aplicação pronta para execução serverless (Vercel)");
-}

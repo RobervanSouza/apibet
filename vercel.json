@@ -14,9 +14,5 @@
       }
     }
   ],
-  "routes": [
-    { "src": "/atualizar-jogos", "dest": "index.js" },
-    { "src": "/", "dest": "index.js" },
-    { "src": "/(.*)", "dest": "index.js" }
-  ]
+  "routes": [{ "src": "/.*", "dest": "index.js" }]
 }
