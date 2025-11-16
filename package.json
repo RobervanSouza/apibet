@@ -2,19 +2,22 @@
   "type": "module",
   "name": "apibet",
   "version": "1.0.0",
+  "description": "",
   "scripts": {
+    "buil": "tsdown",
     "dev": "nodemon api/index.js",
     "start": "node api/index.js",
     "postinstall": "prisma generate"
   },
   "dependencies": {
-    "@prisma/client": "latest",
-    "axios": "latest",
-    "express": "latest",
-    "dotenv": "latest"
+    "@prisma/client": "^6.19.0",
+    "axios": "^1.13.2",
+    "express": "^5.1.0",
+    "serverless-http": "^4.0.0",
+    "dotenv": "^16.4.5"
   },
   "devDependencies": {
-    "nodemon": "latest",
-    "prisma": "latest"
+    "nodemon": "^3.1.10",
+    "prisma": "^6.19.0"
   }
 }
