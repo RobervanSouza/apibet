@@ -1,3 +1,5 @@
+// Localizado em: api/index.js
+
 import express from "express";
 import dotenv from "dotenv";
 import axios from "axios";
@@ -8,21 +10,27 @@ dotenv.config();
 const app = express();
 app.use(express.json());
 
-// rota raiz
-app.get("/", (req, res) => {
-    return res.json({
-        ok: true,
-        message: "API rodando na Vercel",
-        timestamp: new Date().toISOString()
-    });
+// Rota raiz: Retorna a lista de jogos (ajustada conforme sua necessidade)
+app.get("/", async (req, res) => {
+    try {
+        const jogos = await prisma.jogos.findMany();
+        return res.json({
+            ok: true,
+            total: jogos.length,
+            jogos,
+            timestamp: new Date().toISOString()
+        });
+    } catch (err) {
+        return res.status(500).json({ ok: false, error: err.message });
+    }
 });
 
-// ping
+// ping (mantida)
 app.get("/ping", (req, res) => {
     res.json({ ok: true, time: new Date().toISOString() });
 });
 
-// health
+// health (mantida)
 app.get("/health", async (req, res) => {
     const checks = {
         env: {
@@ -34,6 +42,7 @@ app.get("/health", async (req, res) => {
     };
 
     try {
+        // Verifica a conexão com o MongoDB via Prisma (usando queryRaw)
         await prisma.$queryRaw`SELECT 1 as ok`;
         checks.prisma = true;
     } catch (err) {
@@ -41,6 +50,7 @@ app.get("/health", async (req, res) => {
     }
 
     try {
+        // Verifica o serviço externo
         await axios.head("https://v3.football.api-sports.io/status", {
             headers: { "x-apisports-key": process.env.API_FOOTBALL_KEY },
             timeout: 4000
@@ -53,7 +63,7 @@ app.get("/health", async (req, res) => {
     res.json(checks);
 });
 
-// jogos
+// Rota /jogos (alternativa, se a raiz já retorna os jogos)
 app.get("/jogos", async (req, res) => {
     try {
         const jogos = await prisma.jogos.findMany();

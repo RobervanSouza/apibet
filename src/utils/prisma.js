@@ -1,3 +1,5 @@
+// Localizado em: prisma/client.js
+
 import { PrismaClient } from "@prisma/client";
 
 let prisma;
