@@ -1,15 +1,11 @@
-// prisma.js
 import { PrismaClient } from "@prisma/client";
 
 let prisma;
 
-if (globalThis.__prisma) {
-    prisma = globalThis.__prisma;
-} else {
-    prisma = new PrismaClient();
-    globalThis.__prisma = prisma;
+if (!global.prisma) {
+    global.prisma = new PrismaClient();
 }
 
-// Nota: NÃO chamamos prisma.$disconnect() automaticamente em serverless.
+prisma = global.prisma;
 
 export { prisma };
